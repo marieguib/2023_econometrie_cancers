@@ -1,0 +1,273 @@
+---
+title: "Projet_econometrie"
+author: "Clara-Loevane-Marie"
+date: "25/03/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(corrplot)
+library(AER)
+library(car)
+library(sandwich)
+library(lmtest)
+```
+
+## Introduction
+
+### Initialisation des données 
+```{r}
+# Ouverture de la base de données 
+donnees <- read.csv("Donnees.csv",header = TRUE,dec=",",sep=";")
+
+head(donnees)
+str(donnees)
+nrow(donnees)
+```
+Passage des données en dollars constants : 
+```{r}
+donnees$X1_sante <- donnees$X1_sante/donnees$deflateur
+donnees <- donnees[1:27,]
+
+summary(donnees)
+head(donnees)
+```
+
+Passage au logarithme de nos données :
+```{r}
+donnees$lndeces = log(donnees$Y_deces)
+donnees$lnsante = log(donnees$X1_sante)
+donnees$lnalcool = log(donnees$X2_alcool)
+```
+
+Passage des données en séries temporelles :
+```{r}
+donnees_t = ts(data=donnees,frequency=1,start=1990,end=2016)
+head(donnees_t)
+summary(donnees_t)
+str(donnees_t)
+```
+
+## Statistiques descriptives
+
+### Statistiques descriptives des données avant transformation
+
+```{r}
+#Evolution des variables dans le temps
+#Variable endogène :
+plot(Y_deces~Date,data=donnees,main="Evolution du nombre de décès suite à un cancer en France",xlab="Années",ylab="Nombre de décès sur 100 000 personnes",type="l",col="red",lwd=3)
+
+#Variables explicatives :
+par(mfrow = c(2,2))
+plot(X1_sante~Date,data=donnees,main="Evolution des dépenses de santé",xlab="Années",ylab="Dépenses par personne (en USD)",type="l",col="green")
+plot(X2_alcool~Date,data=donnees,main="Evolution de la consommation d'alcool",xlab="Années",ylab="Consommation en litre par personne",type="l",col="blue")
+plot(X3_obesite~Date,data=donnees,main="Evolution de la population atteinte d'obésité",xlab="Années",ylab="Nombre de personnes",col="purple",type="l")
+plot(X4_fumeurs~Date,data=donnees,main="Evolution du nombre de fumeurs quotidiens",xlab="Années",ylab="Nombre de personnes",col="orange",type="l")
+
+#Boxplots de nos variables
+par(mfrow = c(1,5))
+boxplot(donnees$Y_deces, xlab="décès")
+boxplot(donnees$X1_sante,  xlab="dépenses santé")
+boxplot(donnees$X2_alcool,  xlab="consommation d'alcool")
+boxplot(donnees$X3_obesite,  xlab="obésité" )
+boxplot(donnees$X4_fumeurs,  xlab="tabac")
+
+#Résumé des données
+summary(donnees)
+```
+
+### Matrice de corrélation
+
+Matrice de corrélation de notre modèle initial :
+```{r}
+matrixcorr <- cbind(donnees$Y_deces,donnees$X1_sante,donnees$X2_alcool,donnees$X3_obesite,donnees$X4_fumeurs) #création d'une matrice de corrélation avec les 4 variables
+colnames(matrixcorr) <-c("Décès","Santé","Alcool","Obésité","Tabac") 
+matrixcorr
+mcor <- cor(matrixcorr)
+mcor
+corrplot(mcor,type="upper",order="original")
+```
+
+Matrice de corrélation du modèle semi-log : 
+```{r}
+matrixcorrln <- cbind(donnees$lndeces,donnees$lnsante,donnees$lnalcool,donnees$X3_obesite,donnees$X4_fumeurs) #création d'une matrice de corrélation avec les 4 variables
+colnames(matrixcorrln) <-c("Décès","Santé","Alcool","Obésité","Tabac") 
+matrixcorrln
+
+mcorln <- cor(matrixcorrln)
+mcorln
+
+corrplot(mcorln, type="upper", order="original", tl.col="black", tl.srt=45)
+```
+
+Matrice de corrélation sans la variable fumeurs : 
+```{r}
+matrixcorrln <- cbind(donnees$lndeces,donnees$lnsante,donnees$lnalcool,donnees$X3_obesite) #création d'une matrice de corrélation avec les 3 variables
+colnames(matrixcorrln) <-c("Décès","Santé","Alcool","Obésité") 
+matrixcorrln
+
+mcorln <- cor(matrixcorrln)
+mcorln
+
+corrplot(mcorln, type="upper", order="original", tl.col="black", tl.srt=45)
+```
+
+
+## TITRE A AJOUTER / VERIFIER SI TOUT EST UTILE
+
+```{r}
+#Nuages de points
+par(mfrow=c(2,2))
+plot(Y_deces~X1_sante,data=donnees) # passage en log 
+abline(lm(Y_deces~X1_sante,data=donnees),col='red')
+plot(Y_deces~X2_alcool,data=donnees)  # passage en log 
+abline(lm(Y_deces~X2_alcool,data=donnees),col='red')
+plot(Y_deces~X3_obesite,data=donnees) # pas passage en log 
+abline(lm(Y_deces~X3_obesite,data=donnees),col="red")
+plot(Y_deces~X4_fumeurs,data=donnees)  #pas passage en log
+abline(lm(Y_deces~X4_fumeurs,data=donnees),col="blue")
+
+#Nuage de points avec variables passées au log
+par(mfrow=c(2,2))
+plot(lndeces~lnsante,data=donnees,pch="+",xlab="ln dépenses santé",ylab="ln décès") 
+abline(lm(lndeces~lnsante,data=donnees),col='red')
+plot(lndeces~lnalcool,data=donnees,pch="+",xlab="ln consommation alcool",ylab="ln décès") 
+abline(lm(lndeces~lnalcool,data=donnees),col='red')
+plot(lndeces~X3_obesite,data=donnees,pch="+",xlab="taux personnes en surpoids/obèses",ylab="ln décès") 
+abline(lm(lndeces~X3_obesite,data=donnees),col="red")
+plot(lndeces~X4_fumeurs,data=donnees,pch="+",xlab="taux fumeurs",ylab="ln décès")  
+abline(lm(lndeces~X4_fumeurs,data=donnees),col="red")
+
+summary(donnees)
+```
+
+## Choix du modèle économétrique 
+
+### Régression multiple sur le modèle initial 
+```{r}
+reg_donnees <- lm(Y_deces~X1_sante+X2_alcool+X3_obesite+X4_fumeurs,data=donnees)
+summary(reg_donnees)
+```
+
+### Régression multiple sur le modèle en semi-log
+```{r}
+reg_semilogdonnees <- lm(lndeces~lnsante+lnalcool+X3_obesite+X4_fumeurs,data=donnees)
+summary(reg_semilogdonnees)
+```
+Le R² est meilleur dans le modèle en semi-log 
+
+
+### Régression sans la variable fumeurs
+```{r}
+reg_lndonnees <- lm(lndeces~lnsante+lnalcool+X3_obesite,data=donnees)
+summary(reg_lndonnees)
+```
+Le modèle est plus précis sans fumeur et en semi-log
+
+### Régression avec ajout de la variable Trend
+
+Analyse de la tendance dans la série décès : 
+```{r}
+reg_t <- lm(lndeces ~ Trend, data=donnees_t)
+summary(reg_t)
+reg_t$coefficients
+reg_t$residuals
+reg_t$fitted.values
+donnees$Trend<-reg_t$fitted.values
+Trend_fit <- reg_t$fitted.values
+c=c("blue","red")
+ts.plot(donnees_t[,"lndeces"],Trend_fit,main="Evolution - Décès",col=c)
+legend("topleft",c("Décès","Trend_fit"),col=c,lty = c(1,1))
+
+# Tendance polynomiale
+donnees$Trend2 <- donnees$Trend^2
+reg_tp = lm(lndeces ~ Trend + Trend2, data=donnees)
+summary(reg_tp)
+```
+La tendance linéaire est plus adaptée
+
+Régression avec cette nouvelle variable : 
+```{r}
+reg_trend<-lm(lndeces~lnsante+lnalcool+X3_obesite+Trend,data=donnees)
+summary(reg_trend)
+```
+Le modèle est le plus précis jusqu'ici
+
+
+## Analyse précise du modèle et tests
+
+#### Shapiro test  
+```{r}
+shapiro.test(residuals(reg_trend))
+```
+
+#### Test des modèles emboîtés 
+```{r}
+reg_trend<-lm(lndeces~lnsante+lnalcool+X3_obesite+Trend,data=donnees)#régression linéaire du modèle sans contrainte
+summary(reg_trend) 
+
+reg_trendC<-lm(lndeces~lnsante,data=donnees)#régression linéaire du modèle avec contraintes
+summary(reg_trendC)
+
+
+anova(reg_trend,reg_trendC)  #analyse de la variance des deux modèles
+```
+Le modèle complet possède un meilleur pouvoir explicatif
+
+#### Test de changement structurel du modèle
+Test avant/après 2004(obesite) :
+```{r}
+donnees$obesite_av2004<-ifelse(donnees$Date<2004,1,0)
+eq_levelav2004 <-lm(lndeces~ lnsante+lnalcool + X3_obesite:obesite_av2004 + Trend, data=donnees )
+summary(eq_levelav2004)
+
+
+donnees$obesite_ap2004<-ifelse(donnees$Date>2004,1,0)
+eq_levelap2004 <-lm(lndeces~ lnsante+lnalcool + X3_obesite:obesite_ap2004 + Trend , data=donnees )
+summary(eq_levelap2004)
+```
+Il existe donc bien une date de rupture en 2004
+
+
+
+## EST CE QUE LES DONNEES QUI SUIVENT ON LES GARDE ??
+
+Evolution des séries : inutile
+```{r}
+##prise en compte de la dimension temporelle
+donnees_t = ts(data=donnees,frequency=1,start=1990,end=2016)
+
+c = c("blue","red","green","black")
+ts.plot(donnees_t[,"lndeces"],donnees_t[,"lnsante"],donnees_t[,"lnalcool"],donnees_t[,"X3_obesite"],main="Evolution des décès, des dépenses de santé, de la consommation d'alcool et des personnes en situation d'obésité",col=c)
+legend("topleft",c("décès","dépenses en santé","consommation d'alcool","obésité"),col=c,lty = c(2,2))
+# Le graphique n'est pas clair, j'essaie de trouver une façon de représenter les données mais c'est compliqué
+# J'ai aussi essayé avec les variables initiales mais c'est nul aussi
+```
+
+
+
+Estimation equation donneesest
+```{r}
+reg_trend<-lm(lndeces~lnsante+lnalcool+X3_obesite+Trend,data=donnees)
+summary(reg_trend)
+
+## ecart-type, R2 et test de Fisher verif
+sigma = (sum(reg_lndonnees$residuals^2)/reg_lndonnees$df.residual)^0.5
+sigma
+R2 = 1 - (sum(reg_lndonnees$residuals^2)/sum((donnees$lndeces-mean(donnees$lndeces))^2))
+round(R2,4)
+Fcal = (R2/(reg_lndonnees$rank-1))/((1-R2)/reg_lndonnees$df.residual)
+round(Fcal,2)
+
+#p-value
+pvalue = pf(Fcal,reg_lndonnees$rank-1,reg_lndonnees$df.residual,lower.tail=FALSE) ## compare ? 5% , surface ? gauche de la table de Fisher, lower.tail logical; if TRUE (default), probabilities are P[X < = x], otherwise, P[X > x].
+pvalue
+```
+
+
+
+
