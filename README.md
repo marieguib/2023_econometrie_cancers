@@ -1,4 +1,4 @@
-# Projet d'Économétrie - Analyse des Dépenses de Santé et des Décès
+# Projet d'Économétrie - Analyse des facteurs de risque sur le nombre de cancers
 
 ## 📌 Description
 
